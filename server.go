@@ -175,11 +175,15 @@ func Serve(l net.PacketConn, h Handler) error {
 	}
 }
 
-func ListenAndServe(h Handler) error {
-	l, err := net.ListenPacket("udp4", ":69")
+func ListenAndServe(addr string, h Handler) error {
+	if addr == "" {
+		addr = ":69"
+	}
+	l, err := net.ListenPacket("udp4", addr)
 	if err != nil {
 		return err
 	}
+	defer l.Close() // Should I not do this?
 
 	return Serve(l, h)
 }
