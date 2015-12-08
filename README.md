@@ -1,4 +1,4 @@
-# gotftp
+# tftp-go
 
 TFTP server implementation in Go.
 
