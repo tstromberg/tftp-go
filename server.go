@@ -59,6 +59,14 @@ type packetReaderImpl struct {
 }
 
 func (p *packetReaderImpl) read(timeout time.Duration) (packet, error) {
+	if timeout == 0 {
+		select {
+		case buf := <-p.ch:
+			return packetFromWire(bytes.NewBuffer(buf))
+		default:
+			return nil, ErrTimeout
+		}
+	}
 	select {
 	case buf := <-p.ch:
 		return packetFromWire(bytes.NewBuffer(buf))
