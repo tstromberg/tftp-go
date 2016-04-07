@@ -113,10 +113,11 @@ func Serve(l net.PacketConn, h Handler) error {
 		return err
 	}
 
-	lock := sync.Mutex{}
-	table := make(map[string]chan []byte)
-	buf := make([]byte, 65536)
-
+	var (
+		mu    sync.Mutex
+		table = make(map[string]chan []byte)
+		buf   = make([]byte, 65536)
+	)
 	for {
 		n, cm, addr, err := ipv4pc.ReadFrom(buf)
 		if err != nil {
@@ -133,11 +134,12 @@ func Serve(l net.PacketConn, h Handler) error {
 		b := make([]byte, n)
 		copy(b, buf[:n])
 
-		lock.Lock()
+		mu.Lock()
 
 		ch, ok := table[addr.String()]
 		if !ok {
 			ch = make(chan []byte, 10)
+			ch <- b
 			table[addr.String()] = ch
 
 			// Packet reader for client
@@ -161,25 +163,25 @@ func Serve(l net.PacketConn, h Handler) error {
 				for stop := false; !stop; {
 					serve(controlMessage{cm}, r, w, h)
 
-					lock.Lock()
+					mu.Lock()
 					if len(ch) == 0 {
 						delete(table, addr.String())
 						stop = true
 					}
-					lock.Unlock()
+					mu.Unlock()
 				}
 			}()
-		}
-
-		select {
-		case ch <- b:
-		default:
-			// Drop packet on the floor if we can't handle it
+		} else {
+			select {
+			case ch <- b:
+			default:
+				// Drop packet on the floor if we can't handle it
+			}
 		}
 
 		// Unlock after sending buffer so that other routines can reliably check
 		// and use the length of a channel while holding the lock.
-		lock.Unlock()
+		mu.Unlock()
 	}
 }
 
