@@ -78,6 +78,7 @@ type session struct {
 	c       Conn
 	blksize int // The payload size per data packet.
 	timeout int // The number of seconds before a retransmit takes place.
+	totsize int // The total size of the file.
 }
 
 func serve(c Conn, r packetReader, w packetWriter, h Handler) {
@@ -209,8 +210,8 @@ func (s *session) negotiate(o map[string]string) (map[string]string, error) {
 	}
 
 	// HACK! For TianoCore
-	if _, ok := o["tsize"]; ok {
-		oack["tsize"] = "138464"
+	if _, ok := o["tsize"]; ok && s.totsize > 0 {
+		oack["tsize"] = strconv.Itoa(s.totsize)
 	}
 
 	return oack, nil
@@ -241,6 +242,13 @@ func (s *session) serveRRQ(p *packetRRQ) {
 		// This is called from an anonymous function to make errcheck happy.
 		_ = rc.Close()
 	}()
+
+	type sizer interface {
+		Size() int
+	}
+	if sz, ok := rc.(sizer); ok {
+		s.totsize = sz.Size()
+	}
 
 	if len(p.options) > 0 {
 		options, err := s.negotiate(p.options)
