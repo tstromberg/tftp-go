@@ -210,7 +210,7 @@ func (s *session) negotiate(o map[string]string) (map[string]string, error) {
 
 	// HACK! For TianoCore
 	if _, ok := o["tsize"]; ok {
-		oack["tsize"] = "0"
+		oack["tsize"] = "138464"
 	}
 
 	return oack, nil
