@@ -153,11 +153,7 @@ func (p *packetXRQ) Read(b *bytes.Buffer) error {
 	}
 
 	p.options, err = readOptions(b)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func (p *packetXRQ) Write(b *bytes.Buffer) error {

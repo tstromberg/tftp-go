@@ -68,20 +68,18 @@ func newHandlerContext() *handlerContext {
 
 // To implement packetReader
 func (h *handlerContext) read(timeout time.Duration) (packet, error) {
-	select {
-	case e, ok := <-h.snd:
-		if !ok {
-			return nil, ErrTimeout
-		}
+	e, ok := <-h.snd
+	if !ok {
+		return nil, ErrTimeout
+	}
 
-		switch t := e.(type) {
-		case packet:
-			return t, nil
-		case error:
-			return nil, t
-		default:
-			panic("")
-		}
+	switch t := e.(type) {
+	case packet:
+		return t, nil
+	case error:
+		return nil, t
+	default:
+		panic("")
 	}
 }
 
@@ -361,7 +359,7 @@ func TestReadRequestRetries(t *testing.T) {
 
 	for i := 0; i < 2; i++ {
 		// Throw away packet
-		_ = <-h.rcv
+		<-h.rcv
 		// Trigger timeout
 		h.snd <- ErrTimeout
 	}
