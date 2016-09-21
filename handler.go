@@ -208,6 +208,11 @@ func (s *session) negotiate(o map[string]string) (map[string]string, error) {
 		oack["timeout"] = strconv.Itoa(s.timeout)
 	}
 
+	// HACK! For TianoCore
+	if _, ok := o["tsize"]; ok {
+		oack["tsize"] = "0"
+	}
+
 	return oack, nil
 }
 
