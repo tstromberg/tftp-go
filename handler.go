@@ -173,9 +173,9 @@ func (s *session) negotiate(o map[string]string) (map[string]string, error) {
 			return nil, err
 		}
 
-		// HACK! TianoCore sucks balls? This is a test to work around MTU issues.
-		if i > 1468 {
-			i = 1468
+		// This is a work around for MTU issues.
+		if i > 1400 {
+			i = 1400
 		}
 
 		// Lower and upper bound from RFC 2348.
