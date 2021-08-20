@@ -142,7 +142,7 @@ func TestMalformedFirstPacket(t *testing.T) {
 	assert.IsType(t, &packetERROR{}, px)
 
 	p := px.(*packetERROR)
-	assert.Equal(t, p.errorCode, opcode(0))
+	assert.Equal(t, opcode(p.errorCode), opcode(0))
 	assert.Equal(t, p.errorMessage, "invalid opcode")
 }
 
@@ -154,7 +154,7 @@ func TestUnexpectedFirstPacket(t *testing.T) {
 	assert.IsType(t, &packetERROR{}, px)
 
 	p := px.(*packetERROR)
-	assert.Equal(t, p.errorCode, opcode(4))
+	assert.Equal(t, opcode(p.errorCode), opcode(4))
 }
 
 func TestReadFileError(t *testing.T) {
@@ -236,12 +236,12 @@ func TestReadRequestNegotiation(t *testing.T) {
 		{
 			opt:      "blksize",
 			proposed: "65536",
-			returned: "65464",
+			returned: "1400", // Max MTU
 		},
 		{
 			opt:      "blksize",
 			proposed: "12345",
-			returned: "12345",
+			returned: "1400", // Max MTU
 		},
 		{
 			opt:      "timeout",
