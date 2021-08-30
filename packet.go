@@ -26,8 +26,10 @@ import (
 	"strings"
 )
 
-type opcode uint16
-type mode string
+type (
+	opcode uint16
+	mode   string
+)
 
 const (
 	opcodeRRQ   = opcode(1)

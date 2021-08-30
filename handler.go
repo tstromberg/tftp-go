@@ -265,7 +265,7 @@ func (s *session) serveRRQ(p *packetRRQ) {
 	}
 
 	// Proceed to send the file
-	var buf = make([]byte, s.blksize)
+	buf := make([]byte, s.blksize)
 	var n int
 	var readErr, writeErr error
 	for blockNr := uint16(1); readErr == nil; blockNr++ {

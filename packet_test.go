@@ -148,7 +148,7 @@ func TestReadPacketRRQ(t *testing.T) {
 }
 
 func TestWritePacketRRQ(t *testing.T) {
-	var b = bytes.Buffer{}
+	b := bytes.Buffer{}
 	var err error
 
 	p := &packetRRQ{}
@@ -167,7 +167,7 @@ func TestReadPacketWRQ(t *testing.T) {
 }
 
 func TestWritePacketWRQ(t *testing.T) {
-	var b = bytes.Buffer{}
+	b := bytes.Buffer{}
 	var err error
 
 	p := &packetWRQ{}

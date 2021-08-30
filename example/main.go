@@ -35,7 +35,7 @@ func (h Handler) ReadFile(c tftp.Conn, filename string) (tftp.ReadCloser, error)
 
 func (h Handler) WriteFile(c tftp.Conn, filename string) (tftp.WriteCloser, error) {
 	log.Printf("Request from %s to write %s", c.RemoteAddr(), filename)
-	return os.OpenFile(path.Join(h.Path, filename), os.O_WRONLY, 0644)
+	return os.OpenFile(path.Join(h.Path, filename), os.O_WRONLY, 0o644)
 }
 
 func main() {
