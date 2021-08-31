@@ -18,11 +18,17 @@ package tftp
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
 	"strconv"
 	"time"
+)
+
+var (
+	minBlockSize = 8    // as per RFC 2348
+	maxBlockSize = 1400 // fit within a standard MTU of 1500, even if encapsulated
 )
 
 // ReadCloser is what the Handler needs to implement to serve TFTP read requests.
@@ -95,13 +101,8 @@ func serve(c Conn, r packetReader, w packetWriter, h Handler) {
 	s.serve()
 }
 
-func (s *session) writeError(err tftpError, message string) error {
-	p := packetERROR{
-		errorCode:    err.Code,
-		errorMessage: message,
-	}
-
-	return s.write(&p)
+func (s *session) writeError(err tftpError, message string) {
+	s.write(&packetERROR{errorCode: err.Code, errorMessage: message}) //nolint:errcheck // no one cares about errors when sending errors
 }
 
 // writeAndWaitForPacket sends the packet p to our peer and waits for it to
@@ -112,13 +113,13 @@ func (s *session) writeError(err tftpError, message string) error {
 //
 // When a non-timeout error occurs when reading a reply, this function sends an
 // error packet with the error message back to the peer.
-func (s *session) writeAndWaitForPacket(p packet, v packetValidator) (packet, error) {
+func (s *session) writeAndWaitForPacket(p packet, v packetValidator) error {
 	var err error
 
 	for i := 0; i < 3; i++ {
 		err = s.write(p)
 		if err != nil {
-			return nil, err
+			return fmt.Errorf("write failed: %w", err)
 		}
 
 		now := time.Now()
@@ -127,29 +128,29 @@ func (s *session) writeAndWaitForPacket(p packet, v packetValidator) (packet, er
 			timeout := end.Sub(now)
 
 			p, err := s.read(timeout)
-			if err == ErrTimeout {
-				break
-			}
-
 			if err != nil {
-				_ = s.writeError(tftpErrNotDefined, err.Error())
-				return nil, err
+				if errors.Is(err, ErrTimeout) {
+					break
+				}
+
+				s.writeError(tftpErrNotDefined, err.Error())
+				return fmt.Errorf("read failed: %w", err)
 			}
 
 			// Check validity of packet
 			if v(p) {
-				return p, nil
+				return nil
 			}
 		}
 	}
 
-	return nil, ErrTimeout
+	return ErrTimeout
 }
 
 func (s *session) serve() {
 	p, err := s.read(0)
 	if err != nil {
-		_ = s.writeError(tftpErrNotDefined, err.Error())
+		s.writeError(tftpErrNotDefined, err.Error())
 		return
 	}
 
@@ -159,7 +160,7 @@ func (s *session) serve() {
 	case *packetWRQ:
 		s.serveWRQ(px)
 	default:
-		_ = s.writeError(tftpErrIllegalOperation, "")
+		s.writeError(tftpErrIllegalOperation, "")
 	}
 }
 
@@ -173,17 +174,12 @@ func (s *session) negotiate(o map[string]string) (map[string]string, error) {
 			return nil, err
 		}
 
-		// This is a work around for MTU issues.
-		if i > 1400 {
-			i = 1400
-		}
-
-		// Lower and upper bound from RFC 2348.
-		if i < 8 {
-			s.blksize = 8
-		} else if i > 65464 {
-			s.blksize = 65464
-		} else {
+		switch {
+		case i > maxBlockSize:
+			s.blksize = maxBlockSize
+		case i < minBlockSize:
+			s.blksize = minBlockSize
+		default:
 			s.blksize = i
 		}
 
@@ -198,11 +194,12 @@ func (s *session) negotiate(o map[string]string) (map[string]string, error) {
 		}
 
 		// Lower and upper bound from RFC 2349.
-		if i < 1 {
+		switch {
+		case i < 1:
 			s.timeout = 1
-		} else if i > 255 {
+		case i > 255:
 			s.timeout = 255
-		} else {
+		default:
 			s.timeout = i
 		}
 
@@ -227,14 +224,15 @@ func ackValidator(blockNr uint16) packetValidator {
 func (s *session) serveRRQ(p *packetRRQ) {
 	rc, err := s.h.ReadFile(s.c, p.filename)
 	if err != nil {
-		switch err {
-		case os.ErrNotExist:
-			_ = s.writeError(tftpErrNotFound, err.Error())
-		case os.ErrPermission:
-			_ = s.writeError(tftpErrAccessViolation, err.Error())
-		default:
-			_ = s.writeError(tftpErrNotDefined, err.Error())
+		if errors.Is(err, os.ErrNotExist) {
+			s.writeError(tftpErrNotFound, err.Error())
+			return
 		}
+		if errors.Is(err, os.ErrPermission) {
+			s.writeError(tftpErrAccessViolation, err.Error())
+			return
+		}
+		s.writeError(tftpErrNotDefined, err.Error())
 		return
 	}
 
@@ -253,22 +251,21 @@ func (s *session) serveRRQ(p *packetRRQ) {
 	if len(p.options) > 0 {
 		options, err := s.negotiate(p.options)
 		if err != nil {
-			_ = s.writeError(tftpErrOptionNegotiation, err.Error())
+			s.writeError(tftpErrOptionNegotiation, err.Error())
 			return
 		}
 
 		p := &packetOACK{options: options}
-		_, err = s.writeAndWaitForPacket(p, ackValidator(0))
-		if err != nil {
+		if err = s.writeAndWaitForPacket(p, ackValidator(0)); err != nil {
 			return
 		}
 	}
 
 	// Proceed to send the file
-	var buf = make([]byte, s.blksize)
+	buf := make([]byte, s.blksize)
 	var n int
-	var readErr, writeErr error
-	for blockNr := uint16(1); readErr == nil; blockNr++ {
+	var rErr error
+	for blockNr := uint16(1); rErr == nil; blockNr++ {
 		// The semantics of ReadAtLeast are as follows:
 		//
 		// If == "blksize" bytes are read into buf, it will return with err == nil.
@@ -276,16 +273,15 @@ func (s *session) serveRRQ(p *packetRRQ) {
 		// bytes, it will return the number of bytes read and this error. If this
 		// error is io.EOF, it is rewritten to io.ErrUnexpectedEOF if > 0 bytes
 		// were already read.
-		n, readErr = io.ReadAtLeast(rc, buf, s.blksize)
-		switch readErr {
-		case nil:
-			// All is good.
-		case io.EOF, io.ErrUnexpectedEOF:
-			// Treat them as one and the same.
-			readErr = io.EOF
-		default:
-			_ = s.writeError(tftpErrNotDefined, readErr.Error())
-			return
+		n, rErr = io.ReadAtLeast(rc, buf, s.blksize)
+		if rErr != nil {
+			if errors.Is(rErr, io.EOF) || errors.Is(rErr, io.ErrUnexpectedEOF) {
+				// Treat errors as equivalent
+				rErr = io.EOF
+			} else {
+				s.writeError(tftpErrNotDefined, rErr.Error())
+				return
+			}
 		}
 
 		p := &packetDATA{
@@ -293,13 +289,13 @@ func (s *session) serveRRQ(p *packetRRQ) {
 			data:    buf[:n],
 		}
 
-		_, writeErr = s.writeAndWaitForPacket(p, ackValidator(blockNr))
-		if writeErr != nil {
+		if err := s.writeAndWaitForPacket(p, ackValidator(blockNr)); err != nil {
+			// This seems very very suspicious
 			return
 		}
 	}
 }
 
-func (s *session) serveWRQ(p *packetWRQ) {
-	_ = s.writeError(tftpErrNotDefined, "not supported")
+func (s *session) serveWRQ(_ *packetWRQ) {
+	s.writeError(tftpErrNotDefined, "not supported")
 }

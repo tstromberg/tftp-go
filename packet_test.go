@@ -47,6 +47,7 @@ func TestFromWireErrors(t *testing.T) {
 }
 
 func testReadPacketXRQ(t *testing.T, prefix []byte) {
+	t.Helper()
 	var b bytes.Buffer
 	var p packet
 	var err error
@@ -148,7 +149,7 @@ func TestReadPacketRRQ(t *testing.T) {
 }
 
 func TestWritePacketRRQ(t *testing.T) {
-	var b = bytes.Buffer{}
+	b := bytes.Buffer{}
 	var err error
 
 	p := &packetRRQ{}
@@ -167,7 +168,7 @@ func TestReadPacketWRQ(t *testing.T) {
 }
 
 func TestWritePacketWRQ(t *testing.T) {
-	var b = bytes.Buffer{}
+	b := bytes.Buffer{}
 	var err error
 
 	p := &packetWRQ{}
@@ -204,7 +205,11 @@ func TestReadPacketDATA(t *testing.T) {
 		p, err = packetFromWire(b)
 		assert.Nil(t, err)
 
-		px := p.(*packetDATA)
+		px, ok := p.(*packetDATA)
+		if !ok {
+			t.Fatalf("type assert failed: got type %T, want *packetDATA", px)
+		}
+
 		assert.Equal(t, px.blockNr, uint16(0x7f))
 		assert.Equal(t, px.data, []byte("hello world\n"))
 	}
@@ -245,7 +250,11 @@ func TestPacketACK(t *testing.T) {
 		p, err = packetFromWire(&b)
 		assert.Nil(t, err)
 
-		px := p.(*packetACK)
+		px, ok := p.(*packetACK)
+		if !ok {
+			t.Fatalf("type assert failed: got type %T, want *packetACK", p)
+		}
+
 		assert.Equal(t, px.blockNr, uint16(0x7f))
 	}
 }
@@ -295,7 +304,11 @@ func TestPacketERROR(t *testing.T) {
 		p, err = packetFromWire(&b)
 		assert.Nil(t, err)
 
-		px := p.(*packetERROR)
+		px, ok := p.(*packetERROR)
+		if !ok {
+			t.Fatalf("type assert failed: got type %T, want *packetERROR", p)
+		}
+
 		assert.Equal(t, px.errorCode, uint16(0x01))
 		assert.Equal(t, px.errorMessage, "")
 	}
@@ -309,7 +322,11 @@ func TestPacketERROR(t *testing.T) {
 		p, err = packetFromWire(&b)
 		assert.Nil(t, err)
 
-		px := p.(*packetERROR)
+		px, ok := p.(*packetERROR)
+		if !ok {
+			t.Fatalf("type assert failed: got type %T, want *packetERROR", p)
+		}
+
 		assert.Equal(t, px.errorCode, uint16(0x01))
 		assert.Equal(t, px.errorMessage, "error")
 	}
@@ -369,7 +386,10 @@ func TestPacketOPACK(t *testing.T) {
 		var value string
 		var ok bool
 
-		px := p.(*packetOACK)
+		px, ok := p.(*packetOACK)
+		if !ok {
+			t.Fatalf("type assert failed: got type %T, want *packetOACK", p)
+		}
 
 		value, ok = px.options["opt1"]
 		assert.Equal(t, value, "value1")

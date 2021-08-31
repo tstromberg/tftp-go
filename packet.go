@@ -26,8 +26,10 @@ import (
 	"strings"
 )
 
-type opcode uint16
-type mode string
+type (
+	opcode uint16
+	mode   string
+)
 
 const (
 	opcodeRRQ   = opcode(1)
@@ -51,11 +53,7 @@ var (
 	tftpErrNotDefined        = tftpError{0, "Not defined, see error message (if any)."}
 	tftpErrNotFound          = tftpError{1, "File not found."}
 	tftpErrAccessViolation   = tftpError{2, "Access violation."}
-	tftpErrDiskFull          = tftpError{3, "Disk full or allocation exceeded."}
 	tftpErrIllegalOperation  = tftpError{4, "Illegal TFTP operation."}
-	tftpErrUnknownTransferID = tftpError{5, "Unknown transfer ID."}
-	tftpErrFileAlreadyExists = tftpError{6, "File already exists."}
-	tftpErrNoSuchUser        = tftpError{7, "No such user."}
 	tftpErrOptionNegotiation = tftpError{8, "Option negotiation error."}
 )
 
@@ -87,8 +85,7 @@ func readChunk(b *bytes.Buffer) (string, error) {
 
 // writeChunk writes the specified string, followed by a NUL byte.
 func writeChunk(b *bytes.Buffer, line string) error {
-	_, err := b.WriteString(line)
-	if err != nil {
+	if _, err := b.WriteString(line); err != nil {
 		return err
 	}
 
@@ -158,16 +155,13 @@ func (p *packetXRQ) Read(b *bytes.Buffer) error {
 
 func (p *packetXRQ) Write(b *bytes.Buffer) error {
 	var err error
-	if err = writeChunk(b, string(p.filename)); err != nil {
+	if err = writeChunk(b, p.filename); err != nil {
 		return err
 	}
 	if err = writeChunk(b, string(p.mode)); err != nil {
 		return err
 	}
-	if err = writeOptions(b, p.options); err != nil {
-		return err
-	}
-	return nil
+	return writeOptions(b, p.options)
 }
 
 type packetRRQ struct {
@@ -318,9 +312,5 @@ func packetToWire(p packet, b *bytes.Buffer) error {
 		return err
 	}
 
-	if err = p.Write(b); err != nil {
-		return err
-	}
-
-	return nil
+	return p.Write(b)
 }
