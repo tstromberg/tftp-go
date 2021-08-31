@@ -66,8 +66,8 @@ func newHandlerContext() *handlerContext {
 	return h
 }
 
-// To implement packetReader
-func (h *handlerContext) read(timeout time.Duration) (packet, error) {
+// To implement packetReader.
+func (h *handlerContext) read(_ time.Duration) (packet, error) {
 	e, ok := <-h.snd
 	if !ok {
 		return nil, ErrTimeout
@@ -83,13 +83,13 @@ func (h *handlerContext) read(timeout time.Duration) (packet, error) {
 	}
 }
 
-// Implement packetWriter
+// Implement packetWriter.
 func (h *handlerContext) write(p packet) error {
 	h.rcv <- p
 	return nil
 }
 
-// To implement Handler
+// To implement Handler.
 func (h *handlerContext) ReadFile(c Conn, filename string) (ReadCloser, error) {
 	if h.readFunc == nil {
 		return &rcBuffer{&bytes.Buffer{}}, nil
@@ -97,7 +97,7 @@ func (h *handlerContext) ReadFile(c Conn, filename string) (ReadCloser, error) {
 	return h.readFunc(c, filename)
 }
 
-// To implement Handler
+// To implement Handler.
 func (h *handlerContext) WriteFile(c Conn, filename string) (WriteCloser, error) {
 	if h.writeFunc == nil {
 		return &wcBuffer{&bytes.Buffer{}}, nil
@@ -118,12 +118,17 @@ func (h *handlerContext) SetWriteCloser(w WriteCloser) {
 }
 
 func (h *handlerContext) Negotiate(t *testing.T, o map[string]string) {
+	t.Helper()
+
 	h.snd <- &packetRRQ{packetXRQ{options: o}}
 
 	// Receive and validate OACK
 	poack := <-h.rcv
 	assert.IsType(t, &packetOACK{}, poack)
-	oack := poack.(*packetOACK)
+	oack, ok := poack.(*packetOACK)
+	if !ok {
+		t.Fatalf("type assert failed: got type %T, want *packetOACK", oack)
+	}
 
 	// Validate that we got what we asked for
 	for k, v := range o {
@@ -141,8 +146,12 @@ func TestMalformedFirstPacket(t *testing.T) {
 	px := <-h.rcv
 	assert.IsType(t, &packetERROR{}, px)
 
-	p := px.(*packetERROR)
-	assert.Equal(t, p.errorCode, opcode(0))
+	p, ok := px.(*packetERROR)
+	if !ok {
+		t.Fatalf("type assert failed: got type %T, want *packetERROR", p)
+	}
+
+	assert.Equal(t, opcode(p.errorCode), opcode(0))
 	assert.Equal(t, p.errorMessage, "invalid opcode")
 }
 
@@ -153,8 +162,12 @@ func TestUnexpectedFirstPacket(t *testing.T) {
 	px := <-h.rcv
 	assert.IsType(t, &packetERROR{}, px)
 
-	p := px.(*packetERROR)
-	assert.Equal(t, p.errorCode, opcode(4))
+	p, ok := px.(*packetERROR)
+	if !ok {
+		t.Fatalf("type assert failed: got type %T, want *packetERROR", p)
+	}
+
+	assert.Equal(t, opcode(p.errorCode), opcode(4))
 }
 
 func TestReadFileError(t *testing.T) {
@@ -197,7 +210,11 @@ func TestReadFileError(t *testing.T) {
 		px := <-h.rcv
 		assert.IsType(t, &packetERROR{}, px)
 
-		p := px.(*packetERROR)
+		p, ok := px.(*packetERROR)
+		if !ok {
+			t.Fatalf("type assert failed: got type %T, want *packetERROR", p)
+		}
+
 		assert.Equal(t, p.errorCode, test.errorCode)
 		assert.Equal(t, p.errorMessage, test.errorMessage)
 	}
@@ -236,12 +253,12 @@ func TestReadRequestNegotiation(t *testing.T) {
 		{
 			opt:      "blksize",
 			proposed: "65536",
-			returned: "65464",
+			returned: "1400", // Max MTU
 		},
 		{
 			opt:      "blksize",
 			proposed: "12345",
-			returned: "12345",
+			returned: "1400", // Max MTU
 		},
 		{
 			opt:      "timeout",
@@ -338,7 +355,11 @@ func TestReadRequestChunks(t *testing.T) {
 			pdata := <-h.rcv
 			assert.IsType(t, &packetDATA{}, pdata)
 
-			actual := pdata.(*packetDATA)
+			actual, ok := pdata.(*packetDATA)
+			if !ok {
+				t.Fatalf("type assert failed: got type %T, want *packetDATA", pdata)
+			}
+
 			assert.Equal(t, expected, actual)
 			h.snd <- &packetACK{blockNr: actual.blockNr}
 		}
@@ -367,7 +388,11 @@ func TestReadRequestRetries(t *testing.T) {
 	pdata := <-h.rcv
 	assert.IsType(t, &packetDATA{}, pdata)
 
-	data := pdata.(*packetDATA)
+	data, ok := pdata.(*packetDATA)
+	if !ok {
+		t.Fatalf("type assert failed: got type %T, want *packetDATA", pdata)
+	}
+
 	assert.Equal(t, uint16(1), data.blockNr)
 	assert.Equal(t, buf, data.data)
 	h.snd <- &packetACK{blockNr: data.blockNr}
